@@ -38,7 +38,6 @@ nix_tests = \
   check.sh \
   nix-shell.sh \
   check-refs.sh \
-  build-remote-input-addressed.sh \
   secure-drv-outputs.sh \
   restricted.sh \
   fetchGitSubmodules.sh \
@@ -48,14 +47,6 @@ nix_tests = \
   recursive.sh \
   dependencies.sh \
   check-reqs.sh \
-  build-remote-content-addressed-fixed.sh \
-  build-remote-content-addressed-floating.sh \
-  build-remote-trustless-should-pass-0.sh \
-  build-remote-trustless-should-pass-1.sh \
-  build-remote-trustless-should-pass-2.sh \
-  build-remote-trustless-should-pass-3.sh \
-  build-remote-trustless-should-fail-0.sh \
-  build-remote-with-mounted-ssh-ng.sh \
   nar-access.sh \
   impure-eval.sh \
   pure-eval.sh \
@@ -67,15 +58,11 @@ nix_tests = \
   export.sh \
   config.sh \
   add.sh \
-  chroot-store.sh \
   filter-source.sh \
   misc.sh \
   dump-db.sh \
-  linux-sandbox.sh \
-  supplementary-groups.sh \
   build-dry.sh \
   structured-attrs.sh \
-  shell.sh \
   brotli.sh \
   zstd.sh \
   compression-levels.sh \
@@ -96,7 +83,6 @@ nix_tests = \
   build.sh \
   build-delete.sh \
   output-normalization.sh \
-  selfref-gc.sh \
   db-migration.sh \
   bash-profile.sh \
   pass-as-file.sh \
@@ -110,7 +96,6 @@ nix_tests = \
   path-info.sh \
   toString-path.sh \
   read-only-store.sh \
-  nested-sandboxing.sh \
   impure-env.sh \
   debugger.sh \
   extra-sandbox-profile.sh \

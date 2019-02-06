@@ -279,6 +279,7 @@ static void chmod_(const Path & path, mode_t mode)
    directory's parent link ".."). */
 static void movePath(const Path & src, const Path & dst)
 {
+    printMsg(lvlError, "moving path %s", src);
     auto st = lstat(src);
 
     bool changePerm = (geteuid() && S_ISDIR(st.st_mode) && !(st.st_mode & S_IWUSR));
@@ -342,6 +343,7 @@ void LocalDerivationGoal::cleanupPostChildKill()
 
 bool LocalDerivationGoal::cleanupDecideWhetherDiskFull()
 {
+    printMsg(lvlError, "cleanupDecideWhetherDiskFull");
     bool diskFull = false;
 
     /* Heuristically check whether the build failure may have
@@ -382,12 +384,16 @@ bool LocalDerivationGoal::cleanupDecideWhetherDiskFull()
 
 void LocalDerivationGoal::cleanupPostOutputsRegisteredModeCheck()
 {
+    printMsg(lvlError, "cleanupPostOutputsRegisteredModeCheck '%1%'", chrootRootDirDisordered);
     deleteTmpDir(true);
 }
 
 
 void LocalDerivationGoal::cleanupPostOutputsRegisteredModeNonCheck()
 {
+    printMsg(lvlError, "cleaning up '%1%'", chrootRootDirDisordered);
+    if (umount2(chrootRootDirDisordered.c_str(), MNT_DETACH) == -1)
+        printMsg(lvlInfo, "unmounting '%1%' failed, fine", chrootRootDirDisordered);
     /* Delete unused redirected outputs (when doing hash rewriting). */
     for (auto & i : redirectedOutputs)
         deletePath(worker.store.Store::toRealPath(i.second));
@@ -707,6 +713,91 @@ void LocalDerivationGoal::startBuilder()
 
         if (buildUser && chown(chrootRootDir.c_str(), buildUser->getUIDCount() != 1 ? buildUser->getUID() : 0, buildUser->getGID()) == -1)
             throw SysError("cannot change ownership of '%1%'", chrootRootDir);
+
+        chrootRootDirDisordered = chrootParentDir + "/disordered-root";
+	deletePath(chrootRootDirDisordered);
+
+        printMsg(lvlError, "creating disorderfs in '%1%'", chrootRootDirDisordered);
+        if (mkdir(chrootRootDirDisordered.c_str(), buildUser && buildUser->getUIDCount() != 1 ? 0755 : 0750) == -1)
+            throw SysError("cannot create '%1%'", chrootRootDirDisordered);
+
+	if (buildUser) {
+            printMsg(lvlError, "disorderfs'ing in '%1%'", chrootRootDirDisordered);
+	    auto uid = fmt("uid=%d", buildUser->getUIDCount() != 1 ? buildUser->getUID() : 0);
+	    auto gid = fmt("gid=%d", buildUser->getGID());
+            printMsg(lvlError, "uid '%1%', gid %2%", uid, gid);
+	    
+            auto dfRes = runProgram(RunOptions {
+	        .program = "/nix/store/miv90f1aigzdlxv4fxzpca090yxlffia-disorderfs-0.5.11/bin/disorderfs",
+	        .lookupPath = false, 
+	        .args = {
+	            "-o", uid.c_str(),
+	            "-o", uid.c_str(),
+	            chrootRootDir.c_str(),
+	    	chrootRootDirDisordered.c_str()
+	    	},
+	        .mergeStderrToStdout = true
+	        });
+	    if (statusOk(dfRes.first)) {
+	        disordered = true;
+                printMsg(lvlError, "successfully set up disorderfs in '%1%'", chrootRootDirDisordered);
+	    } else {
+	        disordered = false;
+                printMsg(lvlError, "failed to set up disorderfs in '%1%': %2% (ignored)", chrootRootDirDisordered, statusToString(dfRes.first));
+                if (dfRes.second != "")
+                    printError(chomp(dfRes.second));
+	    }
+	} else {
+	    printMsg(lvlError, "disorderfs'ing in '%1%'", chrootRootDirDisordered);
+	    
+            auto dfRes = runProgram(RunOptions {
+	        .program = "/nix/store/miv90f1aigzdlxv4fxzpca090yxlffia-disorderfs-0.5.11/bin/disorderfs",
+	        .lookupPath = false, 
+	        .args = {
+	            chrootRootDir.c_str(),
+	    	    chrootRootDirDisordered.c_str()
+	    	},
+	        .mergeStderrToStdout = true
+	        });
+	    if (statusOk(dfRes.first)) {
+	        disordered = true;
+                printMsg(lvlError, "successfully set up disorderfs in '%1%'", chrootRootDirDisordered);
+	    } else {
+	        disordered = false;
+                printMsg(lvlError, "failed to set up disorderfs in '%1%': %2% (ignored)", chrootRootDirDisordered, statusToString(dfRes.first));
+                if (dfRes.second != "")
+                    printError(chomp(dfRes.second));
+	    }
+	}
+
+        auto wRes = runProgram(RunOptions {
+	    .program = "whoami",
+	    .lookupPath = true, 
+	    .args = {},
+	    .mergeStderrToStdout = true
+	    });
+        if (wRes.second != "")
+            printError(chomp(wRes.second));
+	
+        auto mRes = runProgram(RunOptions {
+	    .program = "mount",
+	    .lookupPath = true, 
+	    .args = {},
+	    .mergeStderrToStdout = true
+	    });
+        if (mRes.second != "")
+            printError(chomp(mRes.second));
+	
+        //if (disordered && buildUser && chown(chrootRootDirDisordered.c_str(), buildUser->getUIDCount() != 1 ? buildUser->getUID() : 0, buildUser->getGID()) == -1)
+        //    throw SysError("cannot change ownership of '%1%'", chrootRootDirDisordered);
+
+        //runProgram("disorderfs", true, {chrootRootDir.c_str(), chrootRootDirDisordered.c_str()});
+        //runProgram("disorderfs", true, Strings{});
+        //runProgram("whoami", true, {});
+        //runProgram("/nix/store/n9k49sbh9vbyh0j281kk2iqnvwihn2in-disorderfs-0.5.11/bin/disorderfs", false, {chrootRootDir.c_str(), chrootRootDirDisordered.c_str()});
+        //runProgram("strace", true, {"/nix/store/n9k49sbh9vbyh0j281kk2iqnvwihn2in-disorderfs-0.5.11/bin/disorderfs", chrootRootDir.c_str(), chrootRootDirDisordered.c_str()});
+	//runProgram("/nix/store/n9k49sbh9vbyh0j281kk2iqnvwihn2in-disorderfs-0.5.11/bin/disorderfs", false, Strings{});
+
 
         /* Create a writable /tmp in the chroot.  Many builders need
            this.  (Of course they should really respect $TMPDIR
@@ -1798,8 +1889,9 @@ void LocalDerivationGoal::runChild()
 
             /* Bind-mount chroot directory to itself, to treat it as a
                different filesystem from /, as needed for pivot_root. */
-            if (mount(chrootRootDir.c_str(), chrootRootDir.c_str(), 0, MS_BIND, 0) == -1)
-                throw SysError("unable to bind mount '%1%'", chrootRootDir);
+	    Path pathToChroot = disordered ? chrootRootDirDisordered : chrootRootDir;
+            if (mount(pathToChroot.c_str(), pathToChroot.c_str(), 0, MS_BIND, 0) == -1)
+                throw SysError("unable to bind mount '%1%'", pathToChroot);
 
             /* Bind-mount the sandbox's Nix store onto itself so that
                we can mark it as a "shared" subtree, allowing bind
@@ -1952,7 +2044,7 @@ void LocalDerivationGoal::runChild()
                 throw SysError("unsharing cgroup namespace");
 
             /* Do the chroot(). */
-            if (chdir(chrootRootDir.c_str()) == -1)
+            if (chdir(pathToChroot.c_str()) == -1)
                 throw SysError("cannot change directory to '%1%'", chrootRootDir);
 
             if (mkdir("real-root", 0) == -1)
@@ -2996,6 +3088,8 @@ void LocalDerivationGoal::checkOutputs(const std::map<std::string, ValidPathInfo
 void LocalDerivationGoal::deleteTmpDir(bool force)
 {
     if (topTmpDir != "") {
+        if (umount2(chrootRootDirDisordered.c_str(), MNT_DETACH) == -1)
+            printMsg(lvlInfo, "unmounting '%1%' failed, fine", chrootRootDirDisordered);
         /* Don't keep temporary directories for builtins because they
            might have privileged stuff (like a copy of netrc). */
         if (settings.keepFailed && !force && !drv->isBuiltin()) {

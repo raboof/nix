@@ -84,6 +84,16 @@ struct LocalDerivationGoal : public DerivationGoal
     Path chrootRootDir;
 
     /**
+     * The root of the disordered chroot environment.
+     */
+    Path chrootRootDirDisordered;
+
+    /**
+     * Whether mounting the disorderfs succeeded
+     */
+    bool disordered = false;
+
+    /**
      * RAII object to delete the chroot directory.
      */
     std::shared_ptr<AutoDelete> autoDelChroot;
