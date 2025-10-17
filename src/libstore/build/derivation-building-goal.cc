@@ -678,7 +678,7 @@ Goal::Co DerivationBuildingGoal::tryToBuild()
             assert(localStoreP);
 
             decltype(DerivationBuilderParams::defaultPathsInChroot) defaultPathsInChroot = settings.sandboxPaths.get();
-            decltype(DerivationBuilderParams::finalEnv) finalEnv;
+            decltype(DerivationBuilderParams::extraEnv) extraEnv;
             decltype(DerivationBuilderParams::extraFiles) extraFiles;
 
             /* Add the closure of store paths to the chroot. */
@@ -702,41 +702,19 @@ Goal::Co DerivationBuildingGoal::tryToBuild()
                     auto json = drv->structuredAttrs->prepareStructuredAttrs(
                         worker.store, *drvOptions, inputPaths, drv->outputs);
 
-                    finalEnv.insert_or_assign(
+                    extraEnv.insert_or_assign(
                         "NIX_ATTRS_SH_FILE",
                         DerivationBuilderParams::EnvEntry{
                             .nameOfPassAsFile = ".attrs.sh",
                             .value = StructuredAttrs::writeShell(json),
                         });
-                    finalEnv.insert_or_assign(
+                    extraEnv.insert_or_assign(
                         "NIX_ATTRS_JSON_FILE",
                         DerivationBuilderParams::EnvEntry{
                             .nameOfPassAsFile = ".attrs.json",
                             .value = json.dump(),
                         });
                 } else {
-                    /* In non-structured mode, set all bindings either directory in the
-                       environment or via a file, as specified by
-                       `DerivationOptions::passAsFile`. */
-                    for (auto & [envName, envValue] : drv->env) {
-                        if (drvOptions->passAsFile.find(envName) == drvOptions->passAsFile.end()) {
-                            finalEnv.insert_or_assign(
-                                envName,
-                                DerivationBuilderParams::EnvEntry{
-                                    .nameOfPassAsFile = std::nullopt,
-                                    .value = envValue,
-                                });
-                        } else {
-                            auto hash = hashString(HashAlgorithm::SHA256, envName);
-                            finalEnv.insert_or_assign(
-                                envName + "Path",
-                                DerivationBuilderParams::EnvEntry{
-                                    .nameOfPassAsFile = ".attr-" + hash.to_string(HashFormat::Nix32, false),
-                                    .value = envValue,
-                                });
-                        }
-                    }
-
                     /* Handle exportReferencesGraph(), if set. */
                     for (auto & [fileName, storePaths] : drvOptions->getParsedExportReferencesGraph(worker.store)) {
                         /* Write closure info to <fileName>. */
@@ -766,7 +744,7 @@ Goal::Co DerivationBuildingGoal::tryToBuild()
                     inputPaths,
                     initialOutputs,
                     std::move(defaultPathsInChroot),
-                    std::move(finalEnv),
+                    std::move(extraEnv),
                     std::move(extraFiles),
                 });
         }

@@ -1000,20 +1000,37 @@ void DerivationBuilderImpl::initEnv()
     /* The maximum number of cores to utilize for parallel building. */
     env["NIX_BUILD_CORES"] = fmt("%d", settings.buildCores ? settings.buildCores : settings.getDefaultCores());
 
-    /* Write the final environment. Note that this is intentionally
-       *not* `drv.env`, because we've desugared things like like
-       "passAFile", "expandReferencesGraph", structured attrs, etc. */
-    for (const auto & [name, info] : finalEnv) {
+    auto writeEnv = [&](const std::string & envVarName, const std::string & fileName, const std::string & value) {
+        writeBuilderFile(fileName, rewriteStrings(value, inputRewrites));
+        env[envVarName] = tmpDirInSandbox() + "/" + fileName;
+    };
+
+    /* In non-structured mode, set all bindings either directory in the
+       environment or via a file, as specified by
+       `DerivationOptions::passAsFile`. */
+    if (!drv.structuredAttrs) {
+        for (auto & i : drv.env) {
+            if (drvOptions.passAsFile.find(i.first) == drvOptions.passAsFile.end()) {
+                env[i.first] = i.second;
+            } else {
+                auto hash = hashString(HashAlgorithm::SHA256, i.first);
+                std::string fn = ".attr-" + hash.to_string(HashFormat::Nix32, false);
+                writeEnv(i.first + "Path", fn, i.second);
+            }
+        }
+    }
+
+    /* Do this with or without structured attrs --- actually, this is
+       used to desugar structured attrs. */
+    for (const auto & [name, info] : extraEnv) {
         if (info.nameOfPassAsFile) {
-            auto & fileName = *info.nameOfPassAsFile;
-            writeBuilderFile(fileName, rewriteStrings(info.value, inputRewrites));
-            env[name] = tmpDirInSandbox() + "/" + fileName;
+            writeEnv(name, *info.nameOfPassAsFile, info.value);
         } else {
             env[name] = info.value;
         }
     }
 
-    /* Add extra files, similar to `finalEnv` */
+    /* Add extra files, analogous to `extraEnv` */
     for (const auto & [fileName, value] : extraFiles) {
         writeBuilderFile(fileName, value);
     }

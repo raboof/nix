@@ -80,13 +80,13 @@ struct DerivationBuilderParams
     };
 
     /**
-     * The final environment variables to additionally set, possibly
+     * Extra environment variables to additionally set, possibly
      * indirectly via a file.
      *
      * This is used by the caller to desugar the "structured attrs"
      * mechanism, so `DerivationBuilder` doesn't need to know about it.
      */
-    std::map<std::string, EnvEntry, std::less<>> finalEnv;
+    std::map<std::string, EnvEntry, std::less<>> extraEnv;
 
     /**
      * Inserted in the temp dir, but no file names placed in env, unlike
@@ -103,7 +103,7 @@ struct DerivationBuilderParams
         const StorePathSet & inputPaths,
         std::map<std::string, InitialOutput> & initialOutputs,
         PathsInChroot defaultPathsInChroot,
-        std::map<std::string, EnvEntry, std::less<>> finalEnv,
+        std::map<std::string, EnvEntry, std::less<>> extraEnv,
         StringMap extraFiles)
         : drvPath{drvPath}
         , buildResult{buildResult}
@@ -113,7 +113,7 @@ struct DerivationBuilderParams
         , initialOutputs{initialOutputs}
         , buildMode{buildMode}
         , defaultPathsInChroot{std::move(defaultPathsInChroot)}
-        , finalEnv{std::move(finalEnv)}
+        , extraEnv{std::move(extraEnv)}
         , extraFiles{std::move(extraFiles)}
     {
     }
