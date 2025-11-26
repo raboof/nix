@@ -1902,7 +1902,7 @@ void DerivationBuilderImpl::cleanupBuild(bool force)
 
         /* Don't keep temporary directories for builtins because they
            might have privileged stuff (like a copy of netrc). */
-        if (settings.keepFailed && !force && !drv.isBuiltin()) {
+        if (settings.keepFailed && !drv.isBuiltin()) {
             printError("note: keeping build directory '%s'", tmpDir);
             chmod(topTmpDir.c_str(), 0755);
             chmod(tmpDir.c_str(), 0755);
